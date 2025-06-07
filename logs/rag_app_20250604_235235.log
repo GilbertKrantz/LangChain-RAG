@@ -1,0 +1,53 @@
+2025-06-04 23:52:35,588 - __main__ - INFO - Logging initialized. Log file: logs/rag_app_20250604_235235.log
+2025-06-04 23:52:35,588 - __main__ - INFO - === RAG Application Starting ===
+2025-06-04 23:52:35,588 - __main__ - INFO - Pulling RAG prompt from LangSmith Hub
+2025-06-04 23:52:36,262 - __main__ - INFO - RAG prompt retrieved successfully
+2025-06-04 23:52:36,262 - __main__ - INFO - Initializing Google Gemini LLM
+2025-06-04 23:52:36,262 - __main__ - INFO - Environment variable 'GOOGLE_API_KEY' retrieved successfully
+2025-06-04 23:52:36,280 - __main__ - INFO - Google Gemini LLM initialized successfully
+2025-06-04 23:52:36,281 - __main__ - INFO - Initializing Google Gemini embeddings
+2025-06-04 23:52:36,282 - __main__ - INFO - Environment variable 'GOOGLE_API_KEY' retrieved successfully
+2025-06-04 23:52:36,284 - __main__ - INFO - Google Gemini embeddings initialized successfully
+2025-06-04 23:52:36,284 - __main__ - INFO - Initializing InMemory vector store with Gemini embeddings
+2025-06-04 23:52:36,286 - __main__ - INFO - Vector store initialized successfully
+2025-06-04 23:52:36,286 - __main__ - INFO - Loading documents
+2025-06-04 23:52:36,286 - utils.DocumentProcessor - INFO - Loading documents from: https://lilianweng.github.io/posts/2023-06-23-agent/
+2025-06-04 23:52:36,515 - utils.DocumentProcessor - INFO - Successfully loaded 1 document(s)
+2025-06-04 23:52:36,516 - utils.DocumentProcessor - INFO - Total characters in first document: 43047
+2025-06-04 23:52:36,516 - __main__ - INFO - Loaded 1 documents
+2025-06-04 23:52:36,516 - __main__ - INFO - Splitting documents into texts
+2025-06-04 23:52:36,516 - utils.DocumentProcessor - INFO - Splitting 1 documents into chunks
+2025-06-04 23:52:36,518 - utils.DocumentProcessor - INFO - Split documents into 63 chunks
+2025-06-04 23:52:36,519 - __main__ - INFO - Split into 63 text chunks
+2025-06-04 23:52:36,519 - __main__ - INFO - Vectorizing documents
+2025-06-04 23:52:36,519 - utils.DocumentProcessor - INFO - Vectorizing 63 document chunks
+2025-06-04 23:52:38,794 - utils.DocumentProcessor - INFO - Successfully vectorized documents. Total documents in vector store: 63
+2025-06-04 23:52:38,794 - __main__ - INFO - Vectorized documents with 63 document IDs
+2025-06-04 23:52:38,795 - __main__ - INFO - Building LLM with configuration
+2025-06-04 23:52:38,795 - utils.LLMBuilder - INFO - Creating LLMBuilder from configuration
+2025-06-04 23:52:38,795 - utils.LLMBuilder - INFO - Configuration validated successfully
+2025-06-04 23:52:38,795 - utils.LLMBuilder - INFO - LLMBuilder initialized successfully
+2025-06-04 23:52:38,796 - __main__ - INFO - LLM builder configured successfully
+2025-06-04 23:52:38,796 - __main__ - INFO - Starting graph compilation
+2025-06-04 23:52:38,800 - __main__ - INFO - Graph compilation completed successfully
+2025-06-04 23:52:38,800 - __main__ - INFO - Application setup completed successfully
+2025-06-04 23:52:38,800 - __main__ - INFO - Starting interactive loop
+2025-06-04 23:52:43,625 - __main__ - INFO - Processing question #1
+2025-06-04 23:52:43,625 - __main__ - INFO - Invoking graph with question: What is RAG?
+2025-06-04 23:52:43,703 - utils.LLMBuilder - INFO - Retrieving documents for question: What is RAG?
+2025-06-04 23:52:44,182 - utils.LLMBuilder - INFO - Retrieved 4 documents
+2025-06-04 23:52:44,188 - utils.LLMBuilder - INFO - Generating answer for question with 4 context documents
+2025-06-04 23:52:45,007 - utils.LLMBuilder - INFO - Answer generated successfully (length: 171 characters)
+2025-06-04 23:52:45,008 - __main__ - INFO - Graph invocation completed successfully
+2025-06-04 23:52:45,009 - __main__ - INFO - Question #1 processed successfully
+2025-06-04 23:52:59,877 - __main__ - INFO - Processing question #2
+2025-06-04 23:52:59,877 - __main__ - INFO - Invoking graph with question: what is react?
+2025-06-04 23:52:59,879 - utils.LLMBuilder - INFO - Retrieving documents for question: what is react?
+2025-06-04 23:53:00,252 - utils.LLMBuilder - INFO - Retrieved 4 documents
+2025-06-04 23:53:00,253 - utils.LLMBuilder - INFO - Generating answer for question with 4 context documents
+2025-06-04 23:53:01,313 - utils.LLMBuilder - INFO - Answer generated successfully (length: 369 characters)
+2025-06-04 23:53:01,314 - __main__ - INFO - Graph invocation completed successfully
+2025-06-04 23:53:01,315 - __main__ - INFO - Question #2 processed successfully
+2025-06-04 23:53:07,473 - __main__ - INFO - User requested exit
+2025-06-04 23:53:07,473 - __main__ - INFO - === RAG Application Shutting Down ===
+2025-06-04 23:53:07,473 - __main__ - INFO - Total questions processed: 2

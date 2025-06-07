@@ -1,0 +1,51 @@
+2025-06-04 23:43:09,805 - __main__ - INFO - Logging initialized. Log file: logs/rag_app_20250604_234309.log
+2025-06-04 23:43:09,805 - __main__ - INFO - === RAG Application Starting ===
+2025-06-04 23:43:09,805 - __main__ - INFO - Pulling RAG prompt from LangSmith Hub
+2025-06-04 23:43:11,603 - __main__ - INFO - RAG prompt retrieved successfully
+2025-06-04 23:43:11,604 - __main__ - INFO - Initializing ChatOpenAI LLM
+2025-06-04 23:43:11,604 - __main__ - INFO - Environment variable 'OPENAI_API_KEY' retrieved successfully
+2025-06-04 23:43:12,442 - __main__ - INFO - ChatOpenAI LLM initialized successfully
+2025-06-04 23:43:12,453 - __main__ - INFO - Initializing OpenAI embeddings
+2025-06-04 23:43:12,907 - __main__ - INFO - OpenAI embeddings initialized successfully
+2025-06-04 23:43:12,908 - __main__ - INFO - Initializing InMemory vector store
+2025-06-04 23:43:12,908 - __main__ - INFO - Vector store initialized successfully
+2025-06-04 23:43:12,908 - __main__ - INFO - Loading documents
+2025-06-04 23:43:13,077 - __main__ - INFO - Loaded 1 documents
+2025-06-04 23:43:13,077 - __main__ - INFO - Splitting documents into texts
+2025-06-04 23:43:13,079 - __main__ - INFO - Split into 63 text chunks
+2025-06-04 23:43:13,079 - __main__ - INFO - Vectorizing documents
+2025-06-04 23:43:13,561 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 429 Too Many Requests"
+2025-06-04 23:43:13,562 - openai._base_client - INFO - Retrying request to /embeddings in 0.466522 seconds
+2025-06-04 23:43:14,554 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 429 Too Many Requests"
+2025-06-04 23:43:14,555 - openai._base_client - INFO - Retrying request to /embeddings in 0.952432 seconds
+2025-06-04 23:43:16,755 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 429 Too Many Requests"
+2025-06-04 23:43:16,756 - __main__ - CRITICAL - Critical error in main application: Error code: 429 - {'error': {'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, read the docs: https://platform.openai.com/docs/guides/error-codes/api-errors.', 'type': 'insufficient_quota', 'param': None, 'code': 'insufficient_quota'}}
+Traceback (most recent call last):
+  File "C:\Users\kanek\GitHub\RAG-LangChain\main.py", line 123, in main
+    document_ids = vectorize_docs(texts, vector_store)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\kanek\GitHub\RAG-LangChain\utils\DocumentProcessor.py", line 33, in vectorize_docs
+    vector_store.add_texts([doc.page_content], [doc.metadata])
+  File "C:\Users\kanek\GitHub\RAG-LangChain\.venv\Lib\site-packages\langchain_core\vectorstores\base.py", line 113, in add_texts
+    return self.add_documents(docs, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\kanek\GitHub\RAG-LangChain\.venv\Lib\site-packages\langchain_core\vectorstores\in_memory.py", line 195, in add_documents
+    vectors = self.embedding.embed_documents(texts)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\kanek\GitHub\RAG-LangChain\.venv\Lib\site-packages\langchain_openai\embeddings\base.py", line 590, in embed_documents
+    return self._get_len_safe_embeddings(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\kanek\GitHub\RAG-LangChain\.venv\Lib\site-packages\langchain_openai\embeddings\base.py", line 478, in _get_len_safe_embeddings
+    response = self.client.create(
+               ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\kanek\GitHub\RAG-LangChain\.venv\Lib\site-packages\openai\resources\embeddings.py", line 129, in create
+    return self._post(
+           ^^^^^^^^^^^
+  File "C:\Users\kanek\GitHub\RAG-LangChain\.venv\Lib\site-packages\openai\_base_client.py", line 1242, in post
+    return cast(ResponseT, self.request(cast_to, opts, stream=stream, stream_cls=stream_cls))
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\kanek\GitHub\RAG-LangChain\.venv\Lib\site-packages\openai\_base_client.py", line 1037, in request
+    raise self._make_status_error_from_response(err.response) from None
+openai.RateLimitError: Error code: 429 - {'error': {'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, read the docs: https://platform.openai.com/docs/guides/error-codes/api-errors.', 'type': 'insufficient_quota', 'param': None, 'code': 'insufficient_quota'}}
+2025-06-04 23:43:16,772 - __main__ - INFO - === RAG Application Shutting Down ===
+2025-06-04 23:43:16,772 - __main__ - INFO - Total questions processed: 0
