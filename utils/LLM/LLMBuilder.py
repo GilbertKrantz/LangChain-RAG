@@ -247,7 +247,10 @@ class LLMBuilder:
                 logger.debug(f"Context length: {len(docs_content)} characters")
             else:
                 docs_content = "No relevant context found."
-                logger.warning("No context documents available for generation")
+                logger.warning(
+                    "No context documents available for generation, Use Converational Context"
+                )
+                docs_content = "You are a helpful assistant. Please answer the question based on your knowledge."
 
             # Prepare prompt input
             prompt_input = {"question": question, "context": docs_content}
