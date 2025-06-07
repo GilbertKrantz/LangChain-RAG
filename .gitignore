@@ -15,3 +15,5 @@ wheels/
 # Logs
 /Logs
 
+# Data
+/Data

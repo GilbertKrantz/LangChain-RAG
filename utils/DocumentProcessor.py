@@ -3,10 +3,13 @@ import logging
 import os
 from pathlib import Path
 from urllib.parse import urlparse
+import pandas as pd
 from langchain_community.document_loaders import (
     WebBaseLoader,
     TextLoader,
     DirectoryLoader,
+    PyPDFLoader,
+    UnstructuredCSVLoader,  # Added for CSV support
 )
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
@@ -97,6 +100,30 @@ def _load_file_docs(file_path):
 
     if file_ext in [".txt", ".md", ".py", ".js", ".html", ".css", ".json", ".xml"]:
         loader = TextLoader(file_path, encoding="utf-8")
+    elif file_ext == ".pdf":
+        loader = PyPDFLoader(file_path)
+    elif file_ext == ".csv":
+        try:
+            # Use pandas to read CSV and convert to text
+            df = pd.read_csv(file_path)
+            # Convert DataFrame to string representation
+            content = df.to_string(index=False)
+            # Create a Document object manually
+            from langchain_core.documents import Document
+
+            doc = Document(
+                page_content=content,
+                metadata={
+                    "source_type": "file",
+                    "original_source": file_path,
+                    "file_name": os.path.basename(file_path),
+                    "file_extension": file_ext,
+                },
+            )
+            docs = [doc]
+        except Exception as e:
+            logger.error(f"Failed to load CSV with pandas: {e}")
+            raise ValueError(f"Unable to load CSV file: {file_path}")
     else:
         # Try TextLoader as fallback for other text-based files
         try:
@@ -104,17 +131,19 @@ def _load_file_docs(file_path):
         except Exception:
             raise ValueError(f"Unsupported file type: {file_ext}")
 
-    docs = loader.load()
+    if file_ext != ".csv":  # For non-CSV files, use the loader
+        docs = loader.load()
 
     if not docs:
         raise ValueError(f"No documents were loaded from file: {file_path}")
 
-    # Add source metadata
-    for doc in docs:
-        doc.metadata["source_type"] = "file"
-        doc.metadata["original_source"] = file_path
-        doc.metadata["file_name"] = os.path.basename(file_path)
-        doc.metadata["file_extension"] = file_ext
+    # Add source metadata for non-CSV files
+    if file_ext != ".csv":
+        for doc in docs:
+            doc.metadata["source_type"] = "file"
+            doc.metadata["original_source"] = file_path
+            doc.metadata["file_name"] = os.path.basename(file_path)
+            doc.metadata["file_extension"] = file_ext
 
     logger.info(f"Loaded {len(docs)} document(s) from file")
     return docs
@@ -137,24 +166,58 @@ def _load_directory_docs(directory_path):
         ".css",
         ".json",
         ".xml",
+        ".pdf",
+        ".csv",  # Added CSV support
     ]
 
-    # Use DirectoryLoader with glob pattern for supported files
-    glob_pattern = "**/*"
-    loader = DirectoryLoader(
+    # Load text-based files
+    text_loader = DirectoryLoader(
         directory_path,
-        glob=glob_pattern,
+        glob="**/*.[tT][xX][tT]|**/*.[mM][dD]|**/*.[pP][yY]|**/*.[jJ][sS]|**/*.[hH][tT][mM][lL]|**/*.[cC][sS][sS]|**/*.[jJ][sS][oO][nN]|**/*.[xX][mM][lL]",
         loader_cls=TextLoader,
         loader_kwargs={"encoding": "utf-8"},
         show_progress=True,
         use_multithreading=True,
     )
 
+    # Load PDFs separately
+    pdf_docs = []
     try:
-        docs = loader.load()
+        pdf_loader = DirectoryLoader(
+            directory_path,
+            glob="**/*.pdf",
+            loader_cls=PyPDFLoader,
+            show_progress=True,
+            use_multithreading=True,
+        )
+        pdf_docs = pdf_loader.load()
     except Exception as e:
-        logger.warning(f"DirectoryLoader failed, trying manual loading: {e}")
+        logger.warning(f"Failed to load PDFs with DirectoryLoader: {e}")
+
+    # Load CSVs separately
+    csv_docs = []
+    try:
+        csv_loader = DirectoryLoader(
+            directory_path,
+            glob="**/*.csv",
+            loader_cls=UnstructuredCSVLoader,
+            show_progress=True,
+            use_multithreading=True,
+        )
+        csv_docs = csv_loader.load()
+    except Exception as e:
+        logger.warning(f"Failed to load CSVs with DirectoryLoader: {e}")
+
+    # Load text-based files
+    try:
+        docs = text_loader.load()
+    except Exception as e:
+        logger.warning(f"Text DirectoryLoader failed, trying manual loading: {e}")
         docs = _load_directory_manually(directory_path, supported_extensions)
+
+    # Combine all documents
+    docs.extend(pdf_docs)
+    docs.extend(csv_docs)
 
     if not docs:
         raise ValueError(f"No documents were loaded from directory: {directory_path}")
@@ -258,7 +321,6 @@ def vectorize_docs(docs, vector_store):
         raise
 
 
-# Enhanced function for multiple URLs and/or local paths
 def get_docs_multiple(paths_list):
     """Get documents from multiple web URLs and/or local file paths."""
     logger.info(f"Loading documents from {len(paths_list)} sources")
@@ -287,7 +349,6 @@ def get_docs_multiple(paths_list):
     return all_docs
 
 
-# Utility function to validate document content
 def validate_docs(docs):
     """Validate that documents have content."""
     logger.info(f"Validating {len(docs)} documents")
@@ -311,7 +372,6 @@ def validate_docs(docs):
     return valid_docs
 
 
-# Utility function to get file info
 def get_source_info(docs):
     """Get information about document sources."""
     source_info = {"web": 0, "file": 0, "directory": 0, "total": len(docs)}
@@ -331,31 +391,3 @@ def get_source_info(docs):
 
     logger.info(f"Source distribution: {source_info}")
     return source_info
-
-
-# Usage examples:
-"""
-# Web URL
-docs = get_docs("https://example.com/page")
-
-# Local file
-docs = get_docs("/path/to/document.txt")
-
-# Local directory
-docs = get_docs("/path/to/documents/")
-
-# Multiple sources (mixed)
-docs = get_docs_multiple([
-    "https://example.com/page1",
-    "/path/to/local/file.txt",
-    "/path/to/directory/",
-    "https://example.com/page2"
-])
-
-# Single call with multiple paths
-docs = get_docs([
-    "https://example.com/page",
-    "/path/to/file.txt",
-    "/path/to/directory/"
-])
-"""
