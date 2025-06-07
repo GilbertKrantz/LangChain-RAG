@@ -1,0 +1,45 @@
+2025-06-07 19:30:28,001 - __main__ - INFO - Logging initialized. Log file: logs/rag_app_20250607_193028.log
+2025-06-07 19:30:28,001 - __main__ - INFO - === RAG Application Starting ===
+2025-06-07 19:30:28,002 - __main__ - INFO - Pulling RAG prompt from LangSmith Hub
+2025-06-07 19:30:29,007 - __main__ - INFO - RAG prompt retrieved successfully
+2025-06-07 19:30:29,007 - __main__ - INFO - Initializing Google Gemini LLM
+2025-06-07 19:30:29,008 - __main__ - INFO - Environment variable 'GOOGLE_API_KEY' retrieved successfully
+2025-06-07 19:30:29,116 - __main__ - INFO - Google Gemini LLM initialized successfully
+2025-06-07 19:30:29,116 - __main__ - INFO - Initializing Google Gemini embeddings
+2025-06-07 19:30:29,116 - __main__ - INFO - Environment variable 'GOOGLE_API_KEY' retrieved successfully
+2025-06-07 19:30:29,117 - __main__ - INFO - Google Gemini embeddings initialized successfully
+2025-06-07 19:30:29,117 - __main__ - INFO - Initializing InMemory vector store with Gemini embeddings
+2025-06-07 19:30:29,117 - __main__ - INFO - Vector store initialized successfully
+2025-06-07 19:30:29,117 - __main__ - INFO - Loading documents
+2025-06-07 19:30:29,117 - utils.DocumentProcessor - INFO - Loading documents from: https://lilianweng.github.io/posts/2023-06-23-agent/
+2025-06-07 19:30:30,391 - utils.DocumentProcessor - INFO - Successfully loaded 1 document(s)
+2025-06-07 19:30:30,392 - utils.DocumentProcessor - INFO - Total characters in first document: 43047
+2025-06-07 19:30:30,393 - __main__ - INFO - Loaded 1 documents
+2025-06-07 19:30:30,393 - __main__ - INFO - Splitting documents into texts
+2025-06-07 19:30:30,393 - utils.DocumentProcessor - INFO - Splitting 1 documents into chunks
+2025-06-07 19:30:30,396 - utils.DocumentProcessor - INFO - Split documents into 63 chunks
+2025-06-07 19:30:30,396 - __main__ - INFO - Split into 63 text chunks
+2025-06-07 19:30:30,396 - __main__ - INFO - Vectorizing documents
+2025-06-07 19:30:30,398 - utils.DocumentProcessor - INFO - Vectorizing 63 document chunks
+2025-06-07 19:30:33,349 - utils.DocumentProcessor - INFO - Successfully vectorized documents. Total documents in vector store: 63
+2025-06-07 19:30:33,350 - __main__ - INFO - Vectorized documents with 63 document IDs
+2025-06-07 19:30:33,350 - __main__ - INFO - Building LLM with configuration
+2025-06-07 19:30:33,350 - utils.LLMBuilder - INFO - Creating LLMBuilder from configuration
+2025-06-07 19:30:33,350 - utils.LLMBuilder - INFO - Configuration validated successfully
+2025-06-07 19:30:33,350 - utils.LLMBuilder - INFO - LLMBuilder initialized successfully
+2025-06-07 19:30:33,350 - __main__ - INFO - LLM builder configured successfully
+2025-06-07 19:30:33,350 - __main__ - INFO - Starting graph compilation
+2025-06-07 19:30:33,355 - __main__ - INFO - Graph compilation completed successfully
+2025-06-07 19:30:33,357 - __main__ - INFO - Application setup completed successfully
+2025-06-07 19:30:33,357 - __main__ - INFO - Starting interactive loop
+2025-06-07 19:30:43,410 - __main__ - INFO - Processing question #1
+2025-06-07 19:30:43,410 - __main__ - INFO - Invoking graph with question: What is the topic you can explain?
+2025-06-07 19:30:43,525 - utils.LLMBuilder - INFO - Retrieving documents for question: What is the topic you can explain?
+2025-06-07 19:30:45,019 - utils.LLMBuilder - INFO - Retrieved 4 documents
+2025-06-07 19:30:45,024 - utils.LLMBuilder - INFO - Generating answer for question with 4 context documents
+2025-06-07 19:30:46,737 - utils.LLMBuilder - INFO - Answer generated successfully (length: 324 characters)
+2025-06-07 19:30:46,738 - __main__ - INFO - Graph invocation completed successfully
+2025-06-07 19:30:46,739 - __main__ - INFO - Question #1 processed successfully
+2025-06-07 19:31:01,991 - __main__ - INFO - User requested exit
+2025-06-07 19:31:01,992 - __main__ - INFO - === RAG Application Shutting Down ===
+2025-06-07 19:31:01,992 - __main__ - INFO - Total questions processed: 1
