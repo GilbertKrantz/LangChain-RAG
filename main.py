@@ -1,12 +1,20 @@
 import logging
 import os
 import sys
+import json
+import subprocess
 from datetime import datetime
 from langchain_google_genai import GoogleGenerativeAI, GoogleGenerativeAIEmbeddings
 from langgraph.graph import START, StateGraph
 from langchain import hub
 from langchain_core.vectorstores import InMemoryVectorStore
+from langchain_core.embeddings import Embeddings
+from langchain_core.language_models import BaseLLM
+from langchain_core.callbacks.manager import CallbackManagerForLLMRun
+
+from langchain_core.outputs import LLMResult, Generation
 from pydantic import SecretStr
+from typing import List, Optional, Any, Dict
 from utils.DocumentProcessor import (
     get_docs,
     get_docs_multiple,
@@ -15,7 +23,9 @@ from utils.DocumentProcessor import (
     validate_docs,
     get_source_info,
 )
-from utils.LLMBuilder import LLMBuilder, State
+from utils.LLM.LLMBuilder import LLMBuilder, State
+from utils.LLM.CUrlLLMBuilder import CurlLLM
+from utils.Embeddings.CUrlEmbeddings import CurlEmbeddings
 
 # Remove IPython display for better compatibility
 try:
@@ -27,69 +37,156 @@ except ImportError:
     print("IPython not available - graph visualization disabled")
 
 
-# Configure logging
 def setup_logging(quiet_mode=False):
     """Set up logging configuration."""
-    # Create logs directory if it doesn't exist
     os.makedirs("logs", exist_ok=True)
-
-    # Create log filename with timestamp
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     log_filename = f"logs/rag_app_{timestamp}.log"
 
-    # Determine logging level from environment or parameter
     log_level = os.getenv("LOGGING_LEVEL", "INFO").upper()
     if quiet_mode:
         log_level = "ERROR"
 
-    # Convert string to logging level
     numeric_level = getattr(logging, log_level, logging.INFO)
-
-    # Configure handlers
     handlers = [logging.FileHandler(log_filename)]
 
-    # Only add console handler if not in quiet mode
     if not quiet_mode and log_level != "CRITICAL":
         handlers.append(logging.StreamHandler(sys.stdout))
 
-    # Configure logging format
     logging.basicConfig(
         level=numeric_level,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
         handlers=handlers,
-        force=True,  # Override any existing configuration
+        force=True,
     )
 
-    # Get logger for this module
     logger = logging.getLogger(__name__)
     if not quiet_mode:
         logger.info(f"Logging initialized. Log file: {log_filename}")
     return logger
 
 
+def create_llm_and_embeddings():
+    """Create LLM and embeddings with curl as primary and Gemini as fallback."""
+    logger = logging.getLogger(__name__)
+
+    # Check for curl configuration
+    curl_llm_url = os.getenv("CURL_LLM_URL")
+    curl_llm_key = os.getenv("CURL_LLM_API_KEY")
+    curl_embedding_url = os.getenv("CURL_EMBEDDING_URL")
+    curl_embedding_key = os.getenv("CURL_EMBEDDING_API_KEY")
+
+    # Gemini fallback
+    gemini_key = os.getenv("GOOGLE_API_KEY")
+
+    llm = None
+    embeddings = None
+
+    # Try to create curl-based LLM
+    if curl_llm_url and curl_llm_key:
+        try:
+            logger.info("Attempting to create curl-based LLM")
+            curl_model = os.getenv("CURL_LLM_MODEL", "gpt-3.5-turbo")
+
+            # Add /chat/completions endpoint if not already present
+            if not curl_llm_url.endswith("/chat/completions"):
+                curl_llm_url = curl_llm_url.rstrip("/") + "/chat/completions"
+
+            llm = CurlLLM(
+                api_url=curl_llm_url,
+                api_key=curl_llm_key,
+                model_name=curl_model,
+                temperature=0.7,
+                max_tokens=2000,  # Increased for DeepSeek R1 reasoning + content
+                timeout=60,  # Increased timeout for longer responses
+            )
+
+            # Test curl LLM using invoke() method
+            test_response = llm.invoke("Hello, this is a test.")
+            logger.info(f"Curl LLM test successful: {test_response[:100]}...")
+
+        except Exception as e:
+            logger.warning(f"Curl LLM failed: {e}, falling back to Gemini")
+            llm = None
+
+    # Try to create curl-based embeddings
+    if curl_embedding_url and curl_embedding_key:
+        try:
+            logger.info("Attempting to create curl-based embeddings")
+            curl_embed_model = os.getenv(
+                "CURL_EMBEDDING_MODEL", "text-embedding-ada-002"
+            )
+            embeddings = CurlEmbeddings(
+                api_url=curl_embedding_url,
+                api_key=curl_embedding_key,
+                model_name=curl_embed_model,
+            )
+
+            # Test curl embeddings
+            test_embedding = embeddings.embed_query("test")
+            if test_embedding:
+                logger.info("Curl embeddings test successful")
+            else:
+                raise Exception("Empty embedding returned")
+
+        except Exception as e:
+            logger.warning(f"Curl embeddings failed: {e}, falling back to Gemini")
+            embeddings = None
+
+    # Fallback to Gemini if needed
+    if not llm and gemini_key:
+        try:
+            logger.info("Creating Gemini LLM as fallback")
+            llm = GoogleGenerativeAI(
+                google_api_key=SecretStr(gemini_key),
+                model="gemini-1.5-flash",
+                temperature=0.7,
+            )
+            test_response = llm.invoke("Hello, this is a test.")
+            logger.info(f"Gemini LLM fallback successful: {test_response[:100]}...")
+        except Exception as e:
+            logger.error(f"Gemini LLM fallback failed: {e}")
+            raise Exception("No working LLM available")
+
+    if not embeddings and gemini_key:
+        try:
+            logger.info("Creating Gemini embeddings as fallback")
+            embeddings = GoogleGenerativeAIEmbeddings(
+                google_api_key=SecretStr(gemini_key), model="models/embedding-001"
+            )
+            test_embedding = embeddings.embed_query("test")
+            logger.info("Gemini embeddings fallback successful")
+        except Exception as e:
+            logger.error(f"Gemini embeddings fallback failed: {e}")
+            raise Exception("No working embeddings available")
+
+    if not llm:
+        raise Exception("No LLM could be initialized")
+    if not embeddings:
+        raise Exception("No embeddings could be initialized")
+
+    return llm, embeddings
+
+
 def get_document_sources():
     """Get document sources from environment variables or use defaults."""
     logger = logging.getLogger(__name__)
 
-    # Check for document sources in environment variables
     doc_sources = os.getenv("DOCUMENT_SOURCES")
     doc_paths = os.getenv("DOCUMENT_PATHS")
 
     sources = []
 
     if doc_sources:
-        # Parse comma-separated sources
         sources.extend([source.strip() for source in doc_sources.split(",")])
         logger.info(f"Found DOCUMENT_SOURCES: {sources}")
 
     if doc_paths:
-        # Parse comma-separated local paths
         paths = [path.strip() for path in doc_paths.split(",")]
         sources.extend(paths)
         logger.info(f"Found DOCUMENT_PATHS: {paths}")
 
     if not sources:
-        # Default to the original web source
         default_source = "https://lilianweng.github.io/posts/2023-06-23-agent/"
         sources.append(default_source)
         logger.info(f"No custom sources found, using default: {default_source}")
@@ -110,14 +207,12 @@ def load_documents_from_sources(sources):
         try:
             logger.info(f"Loading source {i+1}/{len(sources)}: {source}")
 
-            # Check if source exists (for local files/directories)
             if not source.startswith(("http://", "https://")):
                 if not os.path.exists(source):
                     logger.error(f"Local path does not exist: {source}")
                     failed_sources.append((source, "Path does not exist"))
                     continue
 
-            # Load documents from this source
             docs = get_docs(source)
 
             if docs:
@@ -133,7 +228,6 @@ def load_documents_from_sources(sources):
             failed_sources.append((source, str(e)))
             continue
 
-    # Log results
     logger.info(f"Document loading complete:")
     logger.info(f"  - Successful sources: {len(successful_sources)}")
     logger.info(f"  - Failed sources: {len(failed_sources)}")
@@ -155,7 +249,6 @@ def display_source_summary(docs):
         print("⚠️  No documents loaded!")
         return
 
-    # Get source information
     source_info = get_source_info(docs)
 
     print(f"\n📚 Document Summary:")
@@ -182,10 +275,8 @@ def compiler(**kwargs):
     logger.info("Starting graph compilation")
 
     try:
-        # Build the graph
         graph_builder = StateGraph(State)
 
-        # Add nodes in sequence
         node_names = ["analyze_query", "retrieve", "generate"]
         for i, node_name in enumerate(node_names):
             if node_name in kwargs:
@@ -195,16 +286,13 @@ def compiler(**kwargs):
                 logger.error(f"Missing required node function: {node_name}")
                 raise ValueError(f"Missing required node function: {node_name}")
 
-        # Add edges to create sequence
         graph_builder.add_edge(START, node_names[0])
         for i in range(len(node_names) - 1):
             graph_builder.add_edge(node_names[i], node_names[i + 1])
 
-        # Compile the graph
         graph = graph_builder.compile()
         logger.info("Graph compilation completed successfully")
 
-        # Display graph if IPython is available
         if IPYTHON_AVAILABLE:
             try:
                 display(Image(graph.get_graph().draw_mermaid_png()))
@@ -239,114 +327,66 @@ def invoke(graph, question):
         raise
 
 
-def get_env_var(var_name):
-    """Get environment variable, raise error if not set."""
-    logger = logging.getLogger(__name__)
-    logger.debug(f"Retrieving environment variable: {var_name}")
-
-    value = os.getenv(var_name)
-    if value is None:
-        logger.error(f"Environment variable '{var_name}' is not set")
-        raise ValueError(f"Environment variable '{var_name}' is not set.")
-
-    os.environ[var_name] = value  # Ensure it's set in the environment
-    logger.info(f"Environment variable '{var_name}' retrieved successfully")
-    return SecretStr(value)
-
-
-def test_llm_connection(llm):
-    """Test LLM connection with a simple query."""
-    logger = logging.getLogger(__name__)
-    logger.info("Testing LLM connection")
-
-    try:
-        test_response = llm.invoke("Hello, can you hear me?")
-        logger.info("LLM connection test successful")
-
-        # Handle different response types
-        if hasattr(test_response, "content"):
-            logger.debug(f"LLM test response: {test_response.content[:100]}...")
-        elif isinstance(test_response, str):
-            logger.debug(f"LLM test response: {test_response[:100]}...")
-        else:
-            logger.debug(f"LLM test response type: {type(test_response)}")
-
-        return True
-    except Exception as e:
-        logger.error(f"LLM connection test failed: {e}")
-        return False
-
-
-def test_embeddings_connection(embeddings):
-    """Test embeddings connection with a simple query."""
-    logger = logging.getLogger(__name__)
-    logger.info("Testing embeddings connection")
-
-    try:
-        test_embedding = embeddings.embed_query("test")
-        logger.info(
-            f"Embeddings connection test successful - dimension: {len(test_embedding)}"
-        )
-        return True
-    except Exception as e:
-        logger.error(f"Embeddings connection test failed: {e}")
-        return False
-
-
 def print_usage_info():
-    """Print usage information for document sources."""
+    """Print usage information for document sources and curl configuration."""
     print("\n" + "=" * 60)
-    print("📖 DOCUMENT SOURCE CONFIGURATION")
+    print("📖 RAG APPLICATION CONFIGURATION")
     print("=" * 60)
-    print("You can specify document sources using environment variables:")
-    print()
-    print("🌐 DOCUMENT_SOURCES - Web URLs (comma-separated)")
+    print("🔧 CURL CONFIGURATION (Primary):")
     print(
-        "   Example: DOCUMENT_SOURCES='https://example.com/page1,https://example.com/page2'"
+        "   CURL_LLM_URL - API endpoint for LLM requests (e.g., https://openrouter.ai/api/v1)"
+    )
+    print("   CURL_LLM_API_KEY - API key for LLM")
+    print(
+        "   CURL_LLM_MODEL - Model name (e.g., deepseek/deepseek-r1-0528-qwen3-8b:free)"
+    )
+    print("   CURL_EMBEDDING_URL - API endpoint for embeddings")
+    print("   CURL_EMBEDDING_API_KEY - API key for embeddings")
+    print("   CURL_EMBEDDING_MODEL - Embedding model (default: text-embedding-ada-002)")
+    print(
+        "   Note: /chat/completions will be automatically added to CURL_LLM_URL if not present"
     )
     print()
-    print("📁 DOCUMENT_PATHS - Local files/directories (comma-separated)")
-    print("   Example: DOCUMENT_PATHS='/path/to/file.txt,/path/to/directory'")
+    print("🔄 GEMINI FALLBACK:")
+    print("   GOOGLE_API_KEY - Google Gemini API key (fallback)")
     print()
-    print("💡 Supported file types: .txt, .md, .py, .js, .html, .css, .json, .xml")
-    print("💡 For directories, all supported files will be loaded recursively")
-    print("💡 You can mix web URLs and local paths in the same session")
+    print("📁 DOCUMENT SOURCES:")
+    print("   DOCUMENT_SOURCES - Web URLs (comma-separated)")
+    print("   DOCUMENT_PATHS - Local files/directories (comma-separated)")
     print()
     print("🔇 QUIET MODE OPTIONS:")
-    print("   - Use --quiet or -q flag: uv run main.py --quiet")
-    print("   - Set environment: QUIET_MODE=true uv run main.py")
-    print("   - Set log level: LOGGING_LEVEL=ERROR uv run main.py")
+    print("   --quiet or -q flag: python main.py --quiet")
+    print("   QUIET_MODE=true python main.py")
+    print("   LOGGING_LEVEL=ERROR python main.py")
     print("=" * 60)
 
 
 def main():
-    # Check for quiet mode
     quiet_mode = (
         "--quiet" in sys.argv
         or "-q" in sys.argv
         or os.getenv("QUIET_MODE", "").lower() in ["true", "1", "yes"]
     )
 
-    # Initialize logging
     logger = setup_logging(quiet_mode=quiet_mode)
     if not quiet_mode:
-        logger.info("=== Enhanced RAG Application Starting ===")
+        logger.info("=== Enhanced RAG Application with Curl Support Starting ===")
 
-    question_count = 0  # Initialize here to avoid UnboundLocalError
+    question_count = 0
 
     try:
-        # Print usage information (only if not in quiet mode)
         if not quiet_mode:
             print_usage_info()
 
-        # Check for required environment variables first
-        logger.info("Checking environment variables")
+        # Initialize LLM and embeddings with curl primary, Gemini fallback
+        logger.info("Initializing LLM and embeddings")
         try:
-            api_key = get_env_var("GOOGLE_API_KEY")
-        except ValueError as e:
-            logger.error(f"Environment setup failed: {e}")
-            print(f"Setup Error: {e}")
-            print("Please set the GOOGLE_API_KEY environment variable.")
+            llm, embeddings = create_llm_and_embeddings()
+            logger.info("LLM and embeddings initialized successfully")
+        except Exception as e:
+            logger.error(f"Failed to initialize LLM/embeddings: {e}")
+            print(f"Initialization Error: {e}")
+            print("Please check your API keys and configuration.")
             return 1
 
         # Pull RAG prompt from LangSmith Hub
@@ -358,56 +398,12 @@ def main():
             logger.error(f"Failed to pull prompt from hub: {e}")
             print(f"Prompt Error: {e}")
             print(
-                "Could not retrieve RAG prompt. Please check your internet connection and LangSmith access."
+                "Could not retrieve RAG prompt. Please check your internet connection."
             )
-            return 1
-
-        # Initialize LLM
-        logger.info("Initializing Google Gemini LLM")
-        try:
-            llm = GoogleGenerativeAI(
-                google_api_key=api_key,
-                model="gemini-1.5-flash",  # or "gemini-1.5-pro" for better performance
-                temperature=0.7,
-            )
-            logger.info("Google Gemini LLM initialized successfully")
-
-            # Test LLM connection
-            if not test_llm_connection(llm):
-                logger.error("LLM connection test failed")
-                print(
-                    "Error: Could not connect to Google Gemini LLM. Please check your API key and internet connection."
-                )
-                return 1
-
-        except Exception as e:
-            logger.error(f"Failed to initialize LLM: {e}")
-            print(f"LLM Error: {e}")
-            return 1
-
-        # Initialize embeddings
-        logger.info("Initializing Google Gemini embeddings")
-        try:
-            embeddings = GoogleGenerativeAIEmbeddings(
-                google_api_key=api_key, model="models/embedding-001"
-            )
-            logger.info("Google Gemini embeddings initialized successfully")
-
-            # Test embeddings connection
-            if not test_embeddings_connection(embeddings):
-                logger.error("Embeddings connection test failed")
-                print(
-                    "Error: Could not connect to Google Gemini embeddings. Please check your API key and internet connection."
-                )
-                return 1
-
-        except Exception as e:
-            logger.error(f"Failed to initialize embeddings: {e}")
-            print(f"Embeddings Error: {e}")
             return 1
 
         # Initialize vector store
-        logger.info("Initializing InMemory vector store with Gemini embeddings")
+        logger.info("Initializing vector store")
         try:
             vector_store = InMemoryVectorStore(embeddings)
             logger.info("Vector store initialized successfully")
@@ -416,109 +412,47 @@ def main():
             print(f"Vector Store Error: {e}")
             return 1
 
-        # Get document sources
-        logger.info("Determining document sources")
+        # Get document sources and load documents
+        logger.info("Loading documents")
         sources = get_document_sources()
+        docs, successful_sources, failed_sources = load_documents_from_sources(sources)
 
-        # Load and process documents
-        logger.info("Loading documents from configured sources")
-        try:
-            docs, successful_sources, failed_sources = load_documents_from_sources(
-                sources
-            )
-
-            if not docs:
-                logger.error("No documents were loaded from any source")
-                print("❌ Error: No documents could be loaded from any source.")
-                if failed_sources:
-                    print("\nFailed sources:")
-                    for source, error in failed_sources:
-                        print(f"  - {source}: {error}")
-                return 1
-
-            # Display source summary
-            display_source_summary(docs)
-
-            # Validate documents
-            logger.info("Validating loaded documents")
-            docs = validate_docs(docs)
-
-            if not docs:
-                logger.error("No valid documents after validation")
-                print("❌ Error: No valid documents found after validation.")
-                return 1
-
-        except Exception as e:
-            logger.error(f"Failed to load documents: {e}")
-            print(f"Document Loading Error: {e}")
+        if not docs:
+            logger.error("No documents were loaded")
+            print("❌ Error: No documents could be loaded from any source.")
             return 1
 
-        logger.info("Splitting documents into texts")
-        try:
-            texts = text_split(docs)
-            logger.info(f"Split into {len(texts)} text chunks")
+        display_source_summary(docs)
+        docs = validate_docs(docs)
 
-            if len(texts) == 0:
-                logger.warning("No text chunks created")
-                print("Warning: No text chunks were created from documents.")
-
-        except Exception as e:
-            logger.error(f"Failed to split documents: {e}")
-            print(f"Document Splitting Error: {e}")
+        if not docs:
+            logger.error("No valid documents after validation")
+            print("❌ Error: No valid documents found after validation.")
             return 1
 
-        logger.info("Vectorizing documents")
-        try:
-            document_ids = vectorize_docs(texts, vector_store)
-            logger.info(f"Vectorized documents with {len(document_ids)} document IDs")
+        # Process documents
+        logger.info("Processing documents")
+        texts = text_split(docs)
+        document_ids = vectorize_docs(texts, vector_store)
 
-            if len(document_ids) == 0:
-                logger.warning("No documents vectorized")
-                print("Warning: No documents were successfully vectorized.")
-
-        except Exception as e:
-            logger.error(f"Failed to vectorize documents: {e}")
-            print(f"Document Vectorization Error: {e}")
-            return 1
-
-        # Build LLM with configuration
-        logger.info("Building LLM with configuration")
-        try:
-            llm_builder = LLMBuilder.from_config(
-                {"vector_store": vector_store, "prompt": prompt, "llm": llm}
-            )
-            logger.info("LLM builder configured successfully")
-
-            # Get stats for verification
-            stats = llm_builder.get_stats()
-            logger.info(f"LLM Builder Stats: {stats}")
-
-        except Exception as e:
-            logger.error(f"Failed to build LLM configuration: {e}")
-            print(f"LLM Builder Error: {e}")
-            return 1
-
-        # Get methods from LLM builder
-        retrieve = llm_builder.retrieve
-        generate = llm_builder.generate
-        analyze_query = llm_builder.analyze_query
+        # Build LLM configuration
+        logger.info("Building LLM configuration")
+        llm_builder = LLMBuilder.from_config(
+            {"vector_store": vector_store, "prompt": prompt, "llm": llm}
+        )
 
         # Compile graph
         logger.info("Compiling application graph")
-        try:
-            graph = compiler(
-                analyze_query=analyze_query, retrieve=retrieve, generate=generate
-            )
-            logger.info("Application setup completed successfully")
-        except Exception as e:
-            logger.error(f"Failed to compile graph: {e}")
-            print(f"Graph Compilation Error: {e}")
-            return 1
+        graph = compiler(
+            analyze_query=llm_builder.analyze_query,
+            retrieve=llm_builder.retrieve,
+            generate=llm_builder.generate,
+        )
 
         # Interactive loop
         print("\n" + "=" * 50)
-        print("🚀 Enhanced RAG Application started successfully!")
-        print("📚 Documents loaded and indexed from multiple sources")
+        print("🚀 Enhanced RAG Application with Curl Support ready!")
+        print("📚 Documents loaded and indexed")
         print("🤖 AI assistant ready to answer your questions")
         print("Type 'exit', 'quit', or 'q' to quit.")
         print("Type 'help' for usage information.")
@@ -552,7 +486,6 @@ def main():
 
                 print(f"\n🤖 Answer: {response.get('answer', 'No answer generated')}")
 
-                # Show some stats if context was found
                 context_docs = response.get("context", [])
                 if context_docs:
                     print(f"📄 Based on {len(context_docs)} relevant document(s)")
