@@ -1,8 +1,6 @@
 import logging
 import os
 import sys
-import json
-import subprocess
 from datetime import datetime
 from langchain_google_genai import GoogleGenerativeAI, GoogleGenerativeAIEmbeddings
 from langgraph.graph import START, StateGraph
@@ -11,7 +9,6 @@ from langchain_core.vectorstores import InMemoryVectorStore
 from pydantic import SecretStr
 from utils.DocumentProcessor import (
     get_docs,
-    get_docs_multiple,
     text_split,
     vectorize_docs,
     validate_docs,
@@ -183,7 +180,7 @@ def load_documents_from_sources(sources):
             logger.error(f"Failed to load from {source}: {e}")
             failed_sources.append((source, str(e)))
             continue
-    logger.info(f"Document loading complete:")
+    logger.info("Document loading complete:")
     logger.info(f"  - Successful sources: {len(successful_sources)}")
     logger.info(f"  - Failed sources: {len(failed_sources)}")
     logger.info(f"  - Total documents: {len(all_docs)}")
@@ -200,7 +197,7 @@ def display_source_summary(docs):
         print("⚠️  No documents loaded!")
         return
     source_info = get_source_info(docs)
-    print(f"\n📚 Document Summary:")
+    print("\n📚 Document Summary:")
     print(f"  📄 Total documents: {source_info['total']}")
     if source_info["web"] > 0:
         print(f"  🌐 Web documents: {source_info['web']}")
@@ -378,7 +375,7 @@ def main():
             return 1
         logger.info("Loading documents")
         sources = get_document_sources()
-        docs, successful_sources, failed_sources = load_documents_from_sources(sources)
+        docs, _, _ = load_documents_from_sources(sources)
         if not docs:
             logger.error("No documents were loaded")
             print("❌ Error: No documents could be loaded from any source.")
@@ -391,7 +388,7 @@ def main():
             return 1
         logger.info("Processing documents")
         texts = text_split(docs)
-        document_ids = vectorize_docs(texts, vector_store)
+        _ = vectorize_docs(texts, vector_store)
         logger.info("Building LLM configuration")
         llm_builder = LLMBuilder.from_config(
             {"vector_store": vector_store, "prompt": prompt, "llm": llm}
